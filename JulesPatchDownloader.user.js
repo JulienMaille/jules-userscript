@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Jules Patch Downloader
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @description  Adds a button to download the patch file for the current PR on jules.google.com
 // @author       Jules
 // @match        https://jules.google.com/session/*
@@ -16,27 +16,6 @@
     console.log('Jules Patch Downloader: Script loaded');
 
     // --- UTILITIES ---
-
-    function waitForElement(selector, callback) {
-        const element = document.querySelector(selector);
-        if (element) {
-            callback(element);
-            return;
-        }
-
-        const observer = new MutationObserver((mutations, obs) => {
-            const element = document.querySelector(selector);
-            if (element) {
-                obs.disconnect();
-                callback(element);
-            }
-        });
-
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-    }
 
     function getBranchName() {
         const branchElement = document.querySelector('.code-header-branch-name-container');
@@ -99,87 +78,106 @@
 
     // --- MAIN LOGIC ---
 
-    function init() {
-        // Target .panel-buttons instead of .code-header-buttons
-        waitForElement('.panel-buttons', (container) => {
-            if (document.querySelector('.jules-download-patch-button')) return;
+    function addPatchButton(container) {
+        if (container.querySelector('.jules-download-patch-button')) return;
 
-            // Clone an existing button for consistent styling (likely the "Collapse all" button)
-            const templateButton = container.querySelector('button');
-            let newButton;
+        // Clone an existing button for consistent styling (likely the "Collapse all" button)
+        const templateButton = container.querySelector('button');
+        let newButton;
 
-            if (templateButton) {
-                newButton = templateButton.cloneNode(true);
-                newButton.classList.add('jules-download-patch-button');
+        if (templateButton) {
+            newButton = templateButton.cloneNode(true);
+            newButton.classList.add('jules-download-patch-button');
 
-                // Ensure the class is added (not removed)
-                newButton.classList.add('collapse-all-button');
+            // Ensure the class is added (not removed)
+            newButton.classList.add('collapse-all-button');
 
-                // Ensure styling matches but text is correct
-                newButton.textContent = '.patch 🩹';
-            } else {
-                newButton = document.createElement('button');
-                newButton.textContent = '.patch 🩹';
-                newButton.className = 'jules-download-patch-button collapse-all-button';
-            }
+            // Ensure styling matches but text is correct
+            newButton.textContent = '.patch 🩹';
+        } else {
+            newButton = document.createElement('button');
+            newButton.textContent = '.patch 🩹';
+            newButton.className = 'jules-download-patch-button collapse-all-button';
+        }
 
-            // Style adjustments for the new location
-            newButton.style.marginRight = '8px'; // Add space to the right
-            newButton.style.marginLeft = '0px';  // Reset left margin
-            newButton.style.cursor = 'pointer';
+        // Style adjustments for the new location
+        newButton.style.marginRight = '8px'; // Add space to the right
+        newButton.style.marginLeft = '0px';  // Reset left margin
+        newButton.style.cursor = 'pointer';
 
-            // Insert before the first child to place it at the beginning
-            if (container.firstChild) {
-                container.insertBefore(newButton, container.firstChild);
-            } else {
-                container.appendChild(newButton);
-            }
+        // Insert before the first child to place it at the beginning
+        if (container.firstChild) {
+            container.insertBefore(newButton, container.firstChild);
+        } else {
+            container.appendChild(newButton);
+        }
 
-            newButton.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
+        newButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
 
-                console.log('Jules Patch Downloader: Clicked. Starting Active Hijack...');
+            console.log('Jules Patch Downloader: Clicked. Starting Active Hijack...');
 
-                // Try Active Search (Clicking the hidden button)
-                const viewPrButton = document.querySelector('button.view-button') ||
-                                     document.querySelector('swebot-publish-button button') ||
-                                     document.querySelector('.publish-button button');
+            // Try Active Search (Clicking the hidden button)
+            const viewPrButton = document.querySelector('button.view-button') ||
+                                 document.querySelector('swebot-publish-button button') ||
+                                 document.querySelector('.publish-button button');
 
-                if (viewPrButton) {
-                    console.log('Jules Patch Downloader: [TRACE] Active Hijack Starting. Found button:', viewPrButton);
+            if (viewPrButton) {
+                console.log('Jules Patch Downloader: [TRACE] Active Hijack Starting. Found button:', viewPrButton);
 
-                    const originalWindowOpen = unsafeWindow.open;
-                    let capturedUrl = null;
+                const originalWindowOpen = unsafeWindow.open;
+                let capturedUrl = null;
 
-                    unsafeWindow.open = function(url, target, features) {
-                        console.log('Jules Patch Downloader: [TRACE] Captured URL via hijack:', url);
-                        capturedUrl = url;
-                        return { focus: function(){}, close: function(){} };
-                    };
+                unsafeWindow.open = function(url, target, features) {
+                    console.log('Jules Patch Downloader: [TRACE] Captured URL via hijack:', url);
+                    capturedUrl = url;
+                    return { focus: function(){}, close: function(){} };
+                };
 
-                    try {
-                        viewPrButton.click();
-                    } catch (err) {
-                        console.error('Jules Patch Downloader: [TRACE] Click failed', err);
-                    } finally {
-                        unsafeWindow.open = originalWindowOpen;
-                    }
-
-                    if (capturedUrl) {
-                        console.log('Jules Patch Downloader: [TRACE] Hijack SUCCESS. Proceeding to download.');
-                        downloadPatchFile(capturedUrl, null, newButton);
-                    } else {
-                         console.error('Jules Patch Downloader: [TRACE] Hijack FAILED. Button clicked but no URL captured.');
-                         alert('Could not detect PR URL. Is the View PR button working?');
-                    }
-
-                } else {
-                    console.error('Jules Patch Downloader: [TRACE] Hijack FAILED. Could not find any View PR button to hijack.');
-                    alert('Could not find the PR URL or the View PR button on this page.');
+                try {
+                    viewPrButton.click();
+                } catch (err) {
+                    console.error('Jules Patch Downloader: [TRACE] Click failed', err);
+                } finally {
+                    unsafeWindow.open = originalWindowOpen;
                 }
-            });
+
+                if (capturedUrl) {
+                    console.log('Jules Patch Downloader: [TRACE] Hijack SUCCESS. Proceeding to download.');
+                    downloadPatchFile(capturedUrl, null, newButton);
+                } else {
+                     console.error('Jules Patch Downloader: [TRACE] Hijack FAILED. Button clicked but no URL captured.');
+                     alert('Could not detect PR URL. Is the View PR button working?');
+                }
+
+            } else {
+                console.error('Jules Patch Downloader: [TRACE] Hijack FAILED. Could not find any View PR button to hijack.');
+                alert('Could not find the PR URL or the View PR button on this page.');
+            }
         });
+    }
+
+    function init() {
+        // Persistent observer to handle SPA navigation
+        const observer = new MutationObserver((mutations) => {
+            const container = document.querySelector('.panel-buttons');
+            if (container && !container.querySelector('.jules-download-patch-button')) {
+                // Double check to ensure we don't duplicate if multiple mutations fire rapidly
+                addPatchButton(container);
+            }
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Initial check in case the element is already there
+        const container = document.querySelector('.panel-buttons');
+        if (container) {
+            addPatchButton(container);
+        }
     }
 
     init();
